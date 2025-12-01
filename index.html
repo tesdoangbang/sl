@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBT AI - Ujian Online Cerdas</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- Babel (untuk memproses JSX di browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Lucide Icons (Versi UMD untuk Browser) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- ICON HELPER COMPONENT ---
+        // Karena kita menggunakan CDN statis, kita perlu helper untuk merender icon Lucide
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (iconRef.current) {
+                    lucide.createIcons({
+                        icons: { [name]: lucide.icons[name] },
+                        nameAttr: 'data-lucide',
+                        attrs: { class: className, width: size, height: size }
+                    });
+                }
+            }, [name, size, className]);
+            return <i ref={iconRef} data-lucide={name} className={className}></i>;
+        };
+
+        // --- DATA MOCKUP ---
+        const MOCK_USER = { name: "Siswa Cerdas", id: "SISWA-001", class: "XII IPA 1" };
+        const INITIAL_EXAMS = [
+            {
+                id: 1,
+                subject: "Pengetahuan Umum (Contoh)",
+                duration: 10,
+                isAI: false,
+                questions: [
+                    { id: "q1", text: "Apa ibukota Indonesia?", options: [{key:"A", text:"Surabaya"}, {key:"B", text:"Jakarta"}, {key:"C", text:"Bandung"}, {key:"D", text:"Medan"}, {key:"E", text:"Semarang"}], correct: "B" },
+                    { id: "q2", text: "2 + 2 x 2 = ...", options: [{key:"A", text:"8"}, {key:"B", text:"6"}, {key:"C", text:"4"}, {key:"D", text:"10"}, {key:"E", text:"12"}], correct: "B" }
+                ]
+            }
+        ];
+
+        // --- KOMPONEN UTAMA ---
+
+        // 1. API KEY MODAL
+        const ApiKeyModal = ({ onSubmit }) => {
+            const [key, setKey] = useState("");
+            return (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                    <div className="bg-white p-6 rounded-xl max-w-md w-full shadow-2xl border border-slate-200">
+                        <div className="flex justify-center mb-4">
+                            <div className="bg-purple-100 p-3 rounded-full">
+                                <Icon name="Key" className="text-purple-600" size={32} />
+                            </div>
+                        </div>
+                        <h2 className="text-xl font-bold text-center mb-2">Setup API Key Gemini</h2>
+                        <p className="text-sm text-slate-500 text-center mb-6">
+                            Untuk menggunakan fitur AI (Soal Otomatis & Pembahasan), masukkan API Key Google Gemini Anda.
+                            <br/><span className="text-xs text-slate-400">(Key tidak disimpan di server, hanya di browser ini)</span>
+                        </p>
+                        <form onSubmit={(e) => { e.preventDefault(); onSubmit(key); }}>
+                            <input 
+                                type="text" 
+                                value={key}
+                                onChange={(e) => setKey(e.target.value)}
+                                className="w-full border p-3 rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 outline-none font-mono text-sm"
+                                placeholder="Paste API Key (AIzaSy...)"
+                                required
+                            />
+                            <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg font-bold">
+                                Simpan & Lanjutkan
+                            </button>
+                            <div className="mt-4 text-center">
+                                <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-xs text-blue-500 hover:underline">
+                                    Belum punya key? Dapatkan di sini
+                                </a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // 2. LOGIN
+        const Login = ({ onLogin }) => {
+            const [name, setName] = useState("");
+            return (
+                <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border-t-4 border-blue-600 fade-in">
+                        <div className="text-center mb-8">
+                            <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
+                                <Icon name="BookOpen" className="text-white" />
+                            </div>
+                            <h1 className="text-2xl font-bold text-slate-800">E-Ujian Nasional</h1>
+                            <div className="flex items-center justify-center gap-1 mt-2">
+                                <span className="text-xs font-semibold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200 flex items-center">
+                                    <Icon name="Sparkles" size={12} className="mr-1"/> Powered by Gemini
+                                </span>
+                            </div>
+                        </div>
+                        <form onSubmit={(e) => { e.preventDefault(); onLogin(name || "Siswa"); }}>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Nama Siswa</label>
+                                <input type="text" value={name} onChange={e=>setName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Masukkan Nama..." required />
+                            </div>
+                            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors shadow-md">Masuk</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // 3. DASHBOARD
+        const Dashboard = ({ user, exams, onStart, onGenerate, onLogout, isGenerating }) => {
+            const [topic, setTopic] = useState("");
+            const [modalOpen, setModalOpen] = useState(false);
+
+            return (
+                <div className="min-h-screen bg-slate-50 fade-in">
+                    <header className="bg-white shadow-sm px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+                        <div className="flex items-center space-x-3">
+                            <div className="bg-blue-100 p-2 rounded-lg"><Icon name="User" className="text-blue-600"/></div>
+                            <div><h2 className="font-bold text-slate-800">{user.name}</h2><p className="text-xs text-slate-500">{user.class}</p></div>
+                        </div>
+                        <button onClick={onLogout} className="text-red-500 hover:bg-red-50 p-2 rounded-lg flex items-center gap-2"><span className="hidden md:inline text-sm font-medium">Keluar</span><Icon name="LogOut" size={20}/></button>
+                    </header>
+
+                    <main className="p-6 max-w-5xl mx-auto">
+                        <div className="mb-8 bg-gradient-to-r from-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                            <div className="relative z-10">
+                                <h2 className="text-2xl font-bold mb-2 flex items-center gap-2"><Icon name="Sparkles" className="text-yellow-300"/> Latihan Soal AI Instan</h2>
+                                <p className="text-indigo-100 mb-6 max-w-xl">Minta AI membuatkan paket soal latihan topik apa saja secara instan.</p>
+                                <button onClick={() => setModalOpen(true)} disabled={isGenerating} className="bg-white text-indigo-700 px-6 py-3 rounded-lg font-bold hover:bg-indigo-50 shadow-md flex items-center gap-2 transition-transform active:scale-95">
+                                    {isGenerating ? <Icon name="Loader2" className="animate-spin"/> : <Icon name="BrainCircuit"/>}
+                                    {isGenerating ? "Sedang Membuat..." : "Buat Soal Baru"}
+                                </button>
+                            </div>
+                        </div>
+
+                        <h2 className="text-xl font-bold text-slate-800 mb-4">Daftar Ujian</h2>
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {exams.map(exam => (
+                                <div key={exam.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all hover:-translate-y-1">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className={`p-3 rounded-lg ${exam.isAI ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                                            <Icon name={exam.isAI ? "Sparkles" : "BookOpen"} />
+                                        </div>
+                                        {exam.isAI && <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full border border-purple-200">AI GEN</span>}
+                                    </div>
+                                    <h3 className="text-lg font-bold text-slate-800 mb-2 truncate" title={exam.subject}>{exam.subject}</h3>
+                                    <div className="flex gap-4 text-sm text-slate-500 mb-6">
+                                        <div className="flex items-center gap-1"><Icon name="Clock" size={14}/> {exam.duration} m</div>
+                                        <div className="flex items-center gap-1"><Icon name="LayoutGrid" size={14}/> {exam.questions.length} Soal</div>
+                                    </div>
+                                    <button onClick={() => onStart(exam)} className={`w-full py-2 rounded-lg font-medium text-white transition-colors ${exam.isAI ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Mulai Ujian</button>
+                                </div>
+                            ))}
+                        </div>
+                    </main>
+
+                    {modalOpen && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 fade-in">
+                            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold">Topik Ujian AI</h3>
+                                    <button onClick={() => setModalOpen(false)}><Icon name="X" className="text-slate-400 hover:text-red-500"/></button>
+                                </div>
+                                <form onSubmit={(e) => { e.preventDefault(); if(topic) { onGenerate(topic); setModalOpen(false); setTopic(""); } }}>
+                                    <input autoFocus type="text" value={topic} onChange={e=>setTopic(e.target.value)} placeholder="Contoh: Sejarah Majapahit, Kimia Organik..." className="w-full px-4 py-3 border rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 outline-none"/>
+                                    <button type="submit" disabled={!topic} className="w-full bg-purple-600 text-white py-2 rounded-lg font-bold disabled:opacity-50">Generate Soal</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // 4. EXAM INTERFACE
+        const Exam = ({ exam, onSubmit }) => {
+            const [idx, setIdx] = useState(0);
+            const [answers, setAnswers] = useState({});
+            const [marked, setMarked] = useState({});
+            const [timeLeft, setTimeLeft] = useState(exam.duration * 60);
+            const [sidebarOpen, setSidebarOpen] = useState(false);
+
+            useEffect(() => {
+                const timer = setInterval(() => {
+                    setTimeLeft(p => {
+                        if (p <= 1) { clearInterval(timer); onSubmit(answers); return 0; }
+                        return p - 1;
+                    });
+                }, 1000);
+                return () => clearInterval(timer);
+            }, []);
+
+            const formatTime = (s) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+            const q = exam.questions[idx];
+
+            return (
+                <div className="flex flex-col h-screen bg-slate-50 fade-in">
+                    <header className="bg-white h-16 px-4 flex justify-between items-center border-b z-20">
+                        <div className="flex items-center gap-3">
+                            <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="md:hidden"><Icon name="LayoutGrid"/></button>
+                            <h1 className="font-bold text-slate-800 truncate max-w-[200px]">{exam.subject}</h1>
+                        </div>
+                        <div className={`px-4 py-1 rounded-lg font-mono font-bold ${timeLeft < 300 ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                            {formatTime(timeLeft)}
+                        </div>
+                    </header>
+                    <div className="flex flex-1 overflow-hidden relative">
+                        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+                            <div className="max-w-3xl mx-auto">
+                                <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border">
+                                    <div className="flex justify-between mb-4">
+                                        <span className="bg-slate-100 font-bold px-3 py-1 rounded text-sm">No. {idx + 1}</span>
+                                        <button onClick={()=>setMarked(prev=>({...prev, [idx]: !prev[idx]}))} className={`flex gap-1 text-sm ${marked[idx] ? 'text-yellow-500' : 'text-slate-400'}`}>
+                                            <Icon name="Flag" size={18} className={marked[idx] ? "fill-yellow-500" : ""}/> Ragu
+                                        </button>
+                                    </div>
+                                    <p className="text-lg text-slate-800 mb-6 font-medium leading-relaxed">{q.text}</p>
+                                    <div className="space-y-3">
+                                        {q.options.map(opt => (
+                                            <button key={opt.key} onClick={()=>setAnswers({...answers, [idx]: opt.key})} 
+                                                className={`w-full text-left p-4 rounded-lg border-2 flex items-center gap-3 transition-all ${answers[idx] === opt.key ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+                                                <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${answers[idx] === opt.key ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-600'}`}>{opt.key}</span>
+                                                <span className="text-slate-700">{opt.text}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex justify-between">
+                                    <button disabled={idx===0} onClick={()=>setIdx(i=>i-1)} className="px-4 py-2 border rounded-lg hover:bg-slate-50 disabled:opacity-50 flex gap-2"><Icon name="ChevronLeft" size={20}/> Prev</button>
+                                    {idx === exam.questions.length - 1 ? 
+                                        <button onClick={()=>window.confirm('Kumpulkan?') && onSubmit(answers)} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold flex gap-2">Selesai <Icon name="CheckCircle" size={20}/></button> :
+                                        <button onClick={()=>setIdx(i=>i+1)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex gap-2">Next <Icon name="ChevronRight" size={20}/></button>
+                                    }
+                                </div>
+                            </div>
+                        </main>
+                        {/* Sidebar */}
+                        <aside className={`fixed inset-y-0 right-0 z-30 w-72 bg-white shadow-xl transform transition-transform duration-300 md:relative md:transform-none md:shadow-none md:border-l ${sidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
+                            <div className="p-4 h-full flex flex-col">
+                                <div className="md:hidden flex justify-end mb-2"><button onClick={()=>setSidebarOpen(false)}><Icon name="X"/></button></div>
+                                <h3 className="font-bold mb-4">Navigasi Soal</h3>
+                                <div className="grid grid-cols-5 gap-2 content-start overflow-y-auto flex-1">
+                                    {exam.questions.map((_, i) => (
+                                        <button key={i} onClick={()=>{setIdx(i); setSidebarOpen(false);}} 
+                                            className={`h-10 rounded flex items-center justify-center font-bold text-sm relative border ${idx===i?'ring-2 ring-blue-500':''} ${marked[i] ? 'bg-yellow-100 text-yellow-700 border-yellow-400' : answers[i] ? 'bg-green-500 text-white border-green-600' : 'bg-white'}`}>
+                                            {i+1}
+                                            {marked[i] && <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-500 rounded-full"></span>}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button onClick={()=>window.confirm('Kumpulkan?') && onSubmit(answers)} className="mt-4 w-full py-2 bg-green-600 text-white rounded font-bold">Kumpulkan</button>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            );
+        };
+
+        // 5. RESULT & AI EXPLAINER
+        const Result = ({ exam, answers, onBack, apiKey }) => {
+            const [explanations, setExplanations] = useState({});
+            const [loading, setLoading] = useState({});
+            
+            const score = exam.questions.reduce((a, q, i) => a + (answers[i] === q.correct ? 1 : 0), 0);
+            const finalScore = Math.round((score / exam.questions.length) * 100);
+
+            const askAI = async (idx) => {
+                const q = exam.questions[idx];
+                setLoading(p => ({...p, [idx]: true}));
+                try {
+                    const prompt = `Jelaskan soal: "${q.text}". Jawaban benar: ${q.correct}. Siswa jawab: ${answers[idx] || "Kosong"}. Beri penjelasan singkat kenapa benar/salah. Bahasa Indonesia.`;
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    });
+                    const data = await res.json();
+                    setExplanations(p => ({...p, [idx]: data.candidates?.[0]?.content?.parts?.[0]?.text || "Gagal memuat."}));
+                } catch (e) { alert("Error AI"); }
+                setLoading(p => ({...p, [idx]: false}));
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-50 py-8 px-4 fade-in">
+                    <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden">
+                        <div className="bg-blue-600 p-8 text-center text-white">
+                            <Icon name="Award" size={48} className="mx-auto mb-4 opacity-90"/>
+                            <h1 className="text-3xl font-bold">Nilai: {finalScore}</h1>
+                            <p className="opacity-80">{exam.subject}</p>
+                        </div>
+                        <div className="p-8">
+                            <div className="space-y-4">
+                                {exam.questions.map((q, i) => (
+                                    <div key={q.id} className={`p-5 rounded-xl border ${answers[i] === q.correct ? 'bg-white' : 'bg-red-50 border-red-200'}`}>
+                                        <div className="flex gap-3">
+                                            <Icon name={answers[i] === q.correct ? "CheckCircle" : "AlertCircle"} className={answers[i] === q.correct ? "text-green-600" : "text-red-500"}/>
+                                            <div className="w-full">
+                                                <p className="font-bold text-slate-800 mb-2">No {i+1}. {q.text}</p>
+                                                <p className="text-sm">Jawaban Kamu: <span className="font-bold">{answers[i]||"-"}</span> | Kunci: <span className="font-bold text-green-600">{q.correct}</span></p>
+                                                
+                                                {!explanations[i] ? (
+                                                    <button onClick={()=>askAI(i)} disabled={loading[i]} className="mt-2 text-indigo-600 text-sm font-bold flex items-center gap-1 hover:underline">
+                                                        {loading[i] ? <Icon name="Loader2" size={14} className="animate-spin"/> : <Icon name="Sparkles" size={14}/>}
+                                                        {loading[i] ? "Menganalisa..." : "Tanya AI Kenapa?"}
+                                                    </button>
+                                                ) : (
+                                                    <div className="mt-3 bg-indigo-50 p-3 rounded text-sm text-slate-700 leading-relaxed border border-indigo-100 fade-in">
+                                                        <div className="font-bold text-indigo-700 flex items-center gap-1 mb-1"><Icon name="Sparkles" size={12}/> Penjelasan AI:</div>
+                                                        {explanations[i]}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={onBack} className="mt-8 w-full py-3 bg-slate-800 text-white rounded-lg font-bold">Kembali ke Dashboard</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ROOT APP ---
+        const App = () => {
+            const [apiKey, setApiKey] = useState(localStorage.getItem("gemini_key") || "");
+            const [view, setView] = useState("login");
+            const [user, setUser] = useState(null);
+            const [exams, setExams] = useState(INITIAL_EXAMS);
+            const [activeExam, setActiveExam] = useState(null);
+            const [results, setResults] = useState({});
+            const [isGen, setIsGen] = useState(false);
+
+            const handleApiKey = (key) => {
+                setApiKey(key);
+                localStorage.setItem("gemini_key", key);
+            };
+
+            const generateExam = async (topic) => {
+                setIsGen(true);
+                const prompt = `Buat 5 soal pilihan ganda topik "${topic}" untuk SMA. Format JSON Array MURNI: [{"id":"1","text":"soal","options":[{"key":"A","text":"opsi"}],"correct":"A"}]. Bahasa Indonesia.`;
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    });
+                    const data = await res.json();
+                    let txt = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+                    const questions = JSON.parse(txt);
+                    setExams([{ id: Date.now(), subject: `Latihan: ${topic}`, duration: 15, isAI: true, questions }, ...exams]);
+                    alert("Soal berhasil dibuat!");
+                } catch (e) { console.error(e); alert("Gagal membuat soal. Periksa API Key Anda."); }
+                setIsGen(false);
+            };
+
+            if (!apiKey) return <ApiKeyModal onSubmit={handleApiKey} />;
+            if (view === "login") return <Login onLogin={(u) => { setUser({ ...MOCK_USER, name: u }); setView("dashboard"); }} />;
+            if (view === "dashboard") return <Dashboard user={user} exams={exams} onStart={(e)=>{setActiveExam(e); setView("exam");}} onGenerate={generateExam} isGenerating={isGen} onLogout={()=>{setUser(null); setView("login");}} />;
+            if (view === "exam") return <Exam exam={activeExam} onSubmit={(res)=>{setResults(res); setView("result");}} />;
+            if (view === "result") return <Result exam={activeExam} answers={results} apiKey={apiKey} onBack={()=>{setActiveExam(null); setView("dashboard");}} />;
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
